@@ -50,6 +50,7 @@ class MainActivity : AppCompatActivity() {
 
     private var smartAds: SmartAds? = null
     private lateinit var firebaseAnalytics: FirebaseAnalytics
+    private lateinit var remoteConfig: FirebaseRemoteConfig
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -63,8 +64,51 @@ class MainActivity : AppCompatActivity() {
             adsLayout.addView(this)
         }
 
+        remoteConfig = Firebase.remoteConfig
+        val configSettings = remoteConfigSettings {
+            minimumFetchIntervalInSeconds = 3600
+        }
+        remoteConfig.setConfigSettingsAsync(configSettings)
+        remoteConfig.fetchAndActivate()
+            .addOnCompleteListener { task ->
+                if (task.isSuccessful) {
+                    val minDuration = remoteConfig.getLong(getString(R.string.ads_min_duration))
+                    val maxDuration = remoteConfig.getLong(getString(R.string.ads_max_duration))
+                    val adsEnable = remoteConfig.getBoolean(getString(R.string.ads_enabled))
+                    val interAdsAuto = remoteConfig.getBoolean(getString(R.string.inter_ads_auto))
 
+                    val unityId = remoteConfig.getString("unity_ads_unit")
 
+                    AppPrefs(applicationContext).run {
+                        setMinDuration(minDuration)
+                        setMaxDuration(maxDuration)
+                        setAdmobEnable(adsEnable)
+                        setInterstitialAdsAuto(interAdsAuto)
+
+                        setUnityId(unityId)
+                    }
+
+                    val forceUpdateVersion =
+                        remoteConfig.getString(getString(R.string.force_update_version))
+                            .toIntOrNull() ?: 0
+                    if (forceUpdateVersion > BuildConfig.VERSION_CODE) {
+                        val msg = remoteConfig.getString(getString(R.string.force_update_msg))
+                        val pkg = remoteConfig.getString(getString(R.string.force_update_package))
+                        AlertDialog.Builder(this)
+                            .setMessage(msg)
+                            .setCancelable(false)
+                            .setPositiveButton(android.R.string.ok) { _, _ ->
+                                openPlayStore(pkg)
+                                finish()
+                            }
+                            .setNegativeButton(android.R.string.cancel) { _, _ ->
+                                finish()
+                            }
+                            .create()
+                            .show()
+                    }
+                }
+            }
 
         if (!Manifest.permission.WRITE_EXTERNAL_STORAGE.hasPermission()) {
             EasyPermissions.requestPermissions(
